@@ -1,0 +1,29 @@
+[package]
+name = "charred-path"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+bevy = "0.13"
+pretty_assertions = "1.4"
+quickcheck = "1.0"
+
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+enum_glob_use = "deny"
+nursery = "deny"
+unwrap_used = "deny"
+
+[profile.dev]
+opt-level = 1
+
+[profile.dev.package."*"]
+opt-level = 3
+
+
+[profile.release]
+codegen-units = 1
