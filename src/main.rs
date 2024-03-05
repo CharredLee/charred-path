@@ -60,7 +60,7 @@ fn init(
             transform: Transform::from_translation(PLAYER_START),
             ..Default::default()
         },
-        PathType::new(PLAYER_START.truncate(), Vec2::X * 1000.0, puncture_points),
+        PathType::new(PLAYER_START.truncate(), puncture_points),
     ));
 
     // spawn the text

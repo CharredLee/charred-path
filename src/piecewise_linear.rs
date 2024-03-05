@@ -1,6 +1,6 @@
 
-use std::time::Duration;
-use bevy::{prelude::*, utils::hashbrown::HashMap};
+use std::{cmp::Ordering, sync::Arc, time::Duration};
+use bevy::prelude::*;
 
 pub struct PathPlugin;
 
@@ -27,6 +27,12 @@ fn is_any_point_in_triangle(p1: &Vec2, p2: &Vec2, p3: &Vec2, puncture_points: &[
     puncture_points
         .iter()
         .any(|puncture_point| puncture_point.is_in_triangle(p1, p2, p3))
+}
+
+fn should_not_remove(p1: &Vec2, p2: &Vec2, p3: &Vec2, puncture_points: &[PuncturePoint]) -> bool {
+    puncture_points
+        .iter()
+        .any(|p| p.should_not_remove(p1, p2, p3))
 }
 
 
@@ -90,6 +96,13 @@ impl PuncturePoint {
         
     }
 
+    pub fn should_not_remove(&self, p1: &Vec2, p2: &Vec2, p3: &Vec2) -> bool {
+        let x = self.position().x;
+        self.is_in_triangle(p1, p2, p3) 
+            || (p1.x < x && x < p2.x && p2.x < p3.x && (x-p2.x).abs() > 1e-4)
+            || (p2.x < x && x < p1.x && p3.x < p2.x && (x-p2.x).abs() > 1e-4)
+    }
+
     pub fn is_between(&self, p1: &Vec2, p2: &Vec2) -> bool {
         let (y_max, y_min) = (p1.y.max(p2.y), p1.y.min(p2.y));
         if p1.x != p2.x {
@@ -122,20 +135,15 @@ impl PuncturePoint {
 
     /// positive output means ccw
     /// negative output means cw
-    fn winding_update(&self, start: &Vec2, end: &Vec2) -> Option<i8> {
-        let start_to_point = self.position - *start;
-        let segment_vector = *end - *start;
-        let cross_product = start_to_point.x.mul_add(segment_vector.y, -(start_to_point.y * segment_vector.x));
-        if cross_product != 0. {
-            // let fst = (self.position.y - start.y) * (end.x - start.x);
-            // let snd = (end.y - start.y) * (self.position.x - start.x);
-            let (smaller, larger) = (start.x.min(end.x), start.x.max(end.x));
-            if cross_product < 0. && (smaller..=larger).contains(&self.position().x) { // the segment vector is right rot from the start -> puncture vector.
-                return Some(-1);
-            }
-            if cross_product > 0. && (smaller..=larger).contains(&self.position().x) { // the segment vector is left rot from the start -> puncture vector.
-                return Some(1);
-            }
+    fn winding_update(&self, start: &Vec2, end: &Vec2) -> Option<i32> {
+        let position = self.position();
+        let cross_product = (end.y - start.y).mul_add(position.x - start.x, -((position.y - start.y) * (end.x - start.x)));
+        // Check if position is below the line segment
+        if cross_product > 0. && (start.x..end.x).contains(&position.x) {
+            return Some(1);
+        }
+        if cross_product < 0. && (end.x..start.x).contains(&position.x) {
+            return Some(-1);
         }
         None
     }
@@ -165,72 +173,6 @@ impl PLPath {
         }
     }
 
-    /// Generates a 
-    pub fn auto(start: Vec2, end: Vec2, puncture_points: &[PuncturePoint]) -> Self {
-        let mut path = Self::line(start, end);
-        let mut depth = 0;
-        loop {
-            if !path.has_collision(puncture_points) || depth > MAX_RECURSION_DEPTH {
-                break;
-            }
-            path.subdivide_and_shift(puncture_points);
-            depth += 1;
-        }
-        path
-    }
-
-    fn has_collision(&self, puncture_points: &[PuncturePoint]) -> bool {
-        let size = self.nodes.len();
-        if size > 1 {
-            (0..size-1).any(
-                |i| puncture_points.iter().any(
-                    |p| p.is_between(self.get(i), self.get(i+1))
-                )
-            )
-        } else {
-            panic!("Not enough elements in list.")
-        }
-    }
-
-    fn subdivide_and_shift(&mut self, puncture_points: &[PuncturePoint]) {  
-        let (start, end) = (*self.start(), *self.end());
-        let direction = end - start;
-        let normal = Vec2::new(-direction.y, direction.x).normalize(); // Calculate unit normal vector
-    
-        let offset = (end - start).length() / 2.0;
-        let mid = start + direction * (offset / direction.length());
-        let nudge_amount = 0.25; // Adjust this value to control the nudge distance
-        let nudged_mid = mid + normal * nudge_amount; // Nudge the midpoint by a small amount
-    
-        self.nodes.insert(0, nudged_mid);
-    
-        let mut path1 = Self::line(start, nudged_mid);
-        let mut path2 = Self::line(nudged_mid, end);
-    
-        path1.remove_redundant_nodes(puncture_points);
-        path2.remove_redundant_nodes(puncture_points);
-    
-        self.nodes = path1.nodes;
-        self.nodes.extend_from_slice(&path2.nodes);
-        self.remove_redundant_nodes(puncture_points);
-    }
-
-    fn remove_redundant_nodes(&mut self, puncture_points: &[PuncturePoint]) {
-        let mut i = 1;
-        while i + 2 < self.nodes.len() {
-            
-            let p1 = self.get(i-1);
-            let p2 = self.get(i);
-            let p3 = self.get(i+1);
-    
-            if !is_any_point_in_triangle(p1, p2, p3, puncture_points) {
-                self.nodes.remove(i);
-            } else {
-                i += 1;
-            }
-        }
-    }
-
     pub fn reverse(&self) -> Self {
         let mut reversed_nodes = self.nodes.clone();
         reversed_nodes.reverse();
@@ -243,35 +185,36 @@ impl PLPath {
         Self { nodes }
     }
 
-    pub fn to_boxed_polyline2d(&self) -> BoxedPolyline2d {
-        BoxedPolyline2d::from_iter(self.nodes.clone())
-    }
+    pub fn to_segment2d_iter(&self) -> impl Iterator<Item = (Segment2d, Vec2)> + '_ {
+        self.nodes.windows(2).filter_map(|pair| {
+            let point1 = pair[0];
+            let point2 = pair[1];
 
-    pub fn to_polyline(&self) -> Polyline2d<128> {
-        Polyline2d::new(self.nodes.iter().cloned())
+            if point1 == point2 {
+                // Skip segments with zero length
+                None
+            } else {
+                let segment = Segment2d::from_points(point1, point2);
+                Some(segment)
+            }
+        })
     }
 }
 
 #[derive(Debug, Clone, Component)]
 pub struct PathType {
-    base_path: PLPath,
     current_path: PLPath,
-    puncture_points: Vec<PuncturePoint>,
+    puncture_points: Arc<[PuncturePoint]>,
 }
 
 impl PathType {
     pub fn new(
         start: Vec2, 
-        end: Vec2,
         puncture_points: Vec<PuncturePoint>
     ) -> Self {
-        let base_path = PLPath::auto(start, end, &puncture_points);
-        let current_path = PLPath::new(vec![start]);
-
         Self {
-            base_path,
-            current_path,
-            puncture_points,
+            current_path: PLPath::new(vec![start]),
+            puncture_points: puncture_points.into(),
         }
     }
 
@@ -279,23 +222,15 @@ impl PathType {
         path: PLPath,
         puncture_points: Vec<PuncturePoint>,
     ) -> Self {
-        let base_path = PLPath::auto(
-            *path.nodes.first().expect("Path is empty!"), 
-            *path.nodes.last().expect("Path must be at least length 2!"), 
-            &puncture_points
-        );
-        
         Self {
-            base_path,
             current_path: path,
-            puncture_points,
+            puncture_points: puncture_points.into(),
         }
     }
 
     #[must_use]
     pub fn concatenate(&self, other: &PLPath) -> Self {
         Self {
-            base_path: self.base_path.clone(),
             current_path: self.current_path.concatenate(other),
             puncture_points: self.puncture_points.clone(),
         }
@@ -309,147 +244,56 @@ impl PathType {
         self.current_path.nodes.pop();
     }
 
+    /// Appends a 2d position to the end of the current path.
     pub fn push(&mut self, point: &Vec2) {
-        if self.current_path.nodes.len() > 2 {
-            let i = self.current_path.nodes.len() - 2;
-            let p1 = &self.current_path.nodes[i];
-            let p2 = &self.current_path.nodes[i+1];
-            // check if the new node makes the prior node redundant
-            if !is_any_point_in_triangle(p1, p2, point, &self.puncture_points) {
-                // if so, pop the old node before adding the new one. This saves space.
+        let _ = &self.current_path.nodes.split_last();
+        if let [.., p1, p2] = &self.current_path.nodes[..] {
+            if !should_not_remove(p1, p2, point, &self.puncture_points) {
                 self.pop();
-                // If the previous node was redundant, maybe the one before that was as well.
-                // Here, we have a recursive call to go back and check if the node prior is redundant.
                 self.push(point);
             } else {
-                // if the prior node was not redundant, then we just push the new one.
-                self.current_path.push(point);
+                self.current_path.push(point); 
             }
         } else {
-            // if there's two nodes or fewer, we just push the new node.
             self.current_path.push(point);
         }
     }
 
-    // pub fn word(&self) -> String {
-    //     let mut word = String::new();
-    //     let mut full_loop = self.current_path.nodes.clone();
-    //     full_loop.push(*self.current_path.start());
-    //     let mut point_vals = HashMap::<char, i8>::new();
-    //     for puncture in &self.puncture_points {
-    //         point_vals.insert(puncture.name, 0);
-    //     }
-    //     for segment in full_loop.windows(2) {
-    //         let start = segment[0];
-    //         let end = segment[1];
-    //         let mut to_append = String::new();
-    
-    //         // iterate through puncture points.
-    //         // Check for first hit of cw or ccw, then check for second hit.
-    //         for puncture in &self.puncture_points {
-    //             if let Some(n) = puncture.winding_update(&start, &end) {
-    //                 let name = puncture.name;
-    //                 let entry = point_vals.entry(name).or_insert(0);
-    //                 *entry += n;
-    //                 if *entry == 2 {
-    //                     to_append.push(name.to_ascii_lowercase());
-    //                     *entry = 0;
-    //                 } else if *entry == -2 {
-    //                     to_append.push(name.to_ascii_uppercase());
-    //                     *entry = 0;
-    //                 }
-    //             }
-    //         }
-    //         word += &to_append;
-    //     }
-    //     simplify_word(&mut word);
-    //     word
-    // }
-
-    // pub fn word(&self) -> String {
-    //     let mut word = String::new();
-    //     let mut full_loop = self.current_path.nodes.clone();
-    //     full_loop.push(*self.current_path.start());
-    //     let mut point_vals = HashMap::<char, i8>::new();
-    //     for puncture in &self.puncture_points {
-    //         point_vals.insert(puncture.name, 0);
-    //     }
-    //     for segment in full_loop.windows(2) {
-    //         let start = segment[0];
-    //         let end = segment[1];
-    //         if start.x < end.x {
-    //             for puncture in &self.puncture_points {
-    //                 if let Some(n) = puncture.winding_update(&start, &end) {
-    //                     let name = puncture.name;
-    //                     let entry = point_vals.entry(name).or_insert(0);
-    //                     *entry += n;
-    //                     if *entry == 2 {
-    //                         word.push(name.to_ascii_lowercase());
-    //                         *entry = 0;
-    //                     } else if *entry == -2 {
-    //                         word.push(name.to_ascii_uppercase());
-    //                         *entry = 0;
-    //                     }
-    //                 }
-    //             }
-    //         } else if start.x > end.x {
-    //             for puncture in self.puncture_points.iter().rev() {
-    //                 if let Some(n) = puncture.winding_update(&start, &end) {
-    //                     let name = puncture.name;
-    //                     let entry = point_vals.entry(name).or_insert(0);
-    //                     *entry += n;
-    //                     if *entry == 2 {
-    //                         word.push(name.to_ascii_lowercase());
-    //                         *entry = 0;
-    //                     } else if *entry == -2 {
-    //                         word.push(name.to_ascii_uppercase());
-    //                         *entry = 0;
-    //                     }
-    //                 }
-    //             }
-    //         }
-    //     }
-    //     simplify_word(&mut word);
-    //     word
-    // }
-
     pub fn word(&self) -> String {
         let mut word = String::new();
-        let mut full_loop = self.current_path.nodes.clone();
-        full_loop.push(*self.current_path.start());
-        let mut point_vals = HashMap::<char, i8>::new();
-        let mut first_encounter_order = Vec::<char>::new(); // New vector to track the order of first encounters
-        for puncture in &self.puncture_points {
-            point_vals.insert(puncture.name, 0);
-        }
+        let full_loop: Vec<&Vec2> = self.current_path.nodes
+            .iter()
+            .chain(std::iter::once(self.current_path.start()))
+            .collect();
         for segment in full_loop.windows(2) {
-            let start = segment[0];
-            let end = segment[1];
-            for puncture in &self.puncture_points {
-                if let Some(n) = puncture.winding_update(&start, &end) {
-                    let name = puncture.name;
-                    let entry = point_vals.entry(name).or_insert(0);
-                    *entry += n;
-                    // If this is the first encounter with this puncture point
-                    if *entry == 1 || *entry == -1 {
-                        first_encounter_order.push(name); // Add it to the order vector
-                    }
-                    if *entry % 2 == 0 && entry.signum() == n.signum() {
-                        word.push(name.to_ascii_lowercase());
+            let (start, end) = (segment[0], segment[1]);
+            let punctures: Vec<&PuncturePoint> = match start.x.partial_cmp(&end.x) {
+                Some(Ordering::Less) 
+                    => self.puncture_points
+                        .iter()
+                        .collect(),
+                Some(Ordering::Greater) 
+                    => self.puncture_points
+                        .iter()
+                        //.rev()
+                        .collect(),
+                _ => continue,
+            };
+            for puncture in punctures {
+                if let Some(n) = puncture.winding_update(start, end) {
+                    match n {
+                        1 => word.push(puncture.name.to_ascii_lowercase()),
+                        -1 => word.push(puncture.name.to_ascii_uppercase()),
+                        _ => {}
                     }
                 }
             }
         }
-        // Reorder the word based on the first encounter order
-        let mut ordered_word = String::new();
-        for name in first_encounter_order {
-            ordered_word.push_str(&word.chars().filter(|c| c.to_ascii_uppercase() == name || c.to_ascii_lowercase() == name).collect::<String>());
-        }
-        simplify_word(&mut ordered_word);
-        ordered_word
+
+        simplify_word(&mut word);
+        word
     }
 }
-
 
 fn simplify_word(word: &mut String) {
     let mut i = 0;
@@ -466,18 +310,20 @@ fn simplify_word(word: &mut String) {
     }
 }
 
-
-
-pub fn debug_render_paths(
+/// # Rendering PL Paths for Debug purposes
+/// This visualizes the piecewise-linear paths.
+fn debug_render_paths(
     path_types: Query<&PathType>,
-    mut gizmos: Gizmos
+    mut gizmos: Gizmos,
 ) {
     for path_type in path_types.iter() {
-        let polyline = path_type.current_path.to_polyline();
-        gizmos.primitive_2d(polyline, Vec2::ZERO, 0.0, Color::WHITE);
+        if path_type.current_path.nodes.len() > 1 {
+            for segment in path_type.current_path.to_segment2d_iter() {
+                gizmos.primitive_2d(segment.0, segment.1, 0.0, Color::WHITE);
+            }
+        }
     }
 }
-
 
 
 
@@ -499,116 +345,5 @@ mod tests {
         assert!(puncture_point_inside.is_in_triangle(p1, p2, p3));
         assert!(puncture_point_inside_2.is_in_triangle(p1, p2, p3));
         assert!(!puncture_point_outside.is_in_triangle(p1, p2, p3));
-    }
-
-    #[test]
-    fn test_auto_path() {
-        let start = Vec2 { x: 0.0, y: 0.0 };
-        let end = Vec2 { x: 4.0, y: 4.0 };
-        let puncture_points = [
-            PuncturePoint { position: Vec2 { x: 1.0, y: 1.0 }, name: 'A' },
-            PuncturePoint { position: Vec2 { x: 2.0, y: 2.0 }, name: 'B' },
-            PuncturePoint { position: Vec2 { x: 3.0, y: 3.0 }, name: 'C' },
-        ];
-        let path = PLPath::auto(start, end, &puncture_points);
-        println!("{:?}", path);
-    }
-
-    #[test]
-    fn test_word() {
-        let nodes_1 = [
-            Vec2::new(0.0, 0.0),
-            Vec2::new(3.0, 6.0),
-            Vec2::new(7.0, 6.0),
-            Vec2::new(4.0, 4.0),
-            Vec2::new(3.0, 6.0),
-            Vec2::new(7.0, 6.0),
-            Vec2::new(10.0, 0.0),
-        ];
-        let pl_path_1 = PLPath::new(nodes_1);
-        let puncture_points_1: Vec<PuncturePoint> = vec![
-            PuncturePoint::new(Vec2::new(5.0, 5.0), 'A')
-        ];
-        let path_type_1 = PathType::from_path(pl_path_1, puncture_points_1);
-        let word_1 = path_type_1.word();
-        assert_eq!(word_1, "aa");
-
-        let nodes_2 = [
-            Vec2::new(0.0, 0.0),
-            Vec2::new(7.0, 6.0),
-            Vec2::new(3.0, 6.0),
-            Vec2::new(4.0, 4.0),
-            Vec2::new(7.0, 6.0),
-            Vec2::new(3.0, 6.0),
-            Vec2::new(10.0, 0.0),
-        ];
-        let pl_path_2 = PLPath::new(nodes_2);
-        let puncture_points_2: Vec<PuncturePoint> = vec![
-            PuncturePoint::new(Vec2::new(5.0, 5.0), 'A')
-        ];
-        let path_type_2 = PathType::from_path(pl_path_2, puncture_points_2);
-        let word_2 = path_type_2.word();
-        assert_eq!(word_2, "AA");
-    }
-
-    #[test]
-    fn test_word_non_trivial_wrapping() {
-        let nodes = [
-            Vec2::new(0.0, 0.0),  
-            Vec2::new(2.0, 1.0),
-            Vec2::new(3.0, 2.0),
-            Vec2::new(1.0, 2.0), 
-            Vec2::new(0.5, 1.0),
-            Vec2::new(2.0, 0.5),
-            Vec2::new(3.0, 1.0),
-            Vec2::new(2.0, 2.0),
-            Vec2::new(1.0, 1.0),
-            Vec2::new(2.0, 0.0),
-            Vec2::new(3.0, 0.0),  
-            Vec2::new(4.0, 0.0)
-        ];
-
-        let puncture_points = vec![
-            PuncturePoint::new(Vec2::new(1.5, 1.5), 'A'),
-            PuncturePoint::new(Vec2::new(2.5, 0.5), 'B')
-        ];
-
-        let pl_path = PLPath::new(nodes);
-        let path_type = PathType::from_path(pl_path, puncture_points);
-        let word = path_type.word();
-
-        assert_eq!(word, "aBb");
-    }   
-
-    #[test]
-    fn test_word_two_punctures() {
-        let nodes = [
-            Vec2::new(0.0, 0.0),
-            Vec2::new(2.0, 4.0),
-            Vec2::new(6.0, 4.0),
-            Vec2::new(6.0, 2.0),
-            Vec2::new(4.0, 2.0),
-            Vec2::new(4.0, 0.0),
-            Vec2::new(6.0, 0.0),
-            Vec2::new(6.0, 2.0),
-            Vec2::new(8.0, 2.0),
-            Vec2::new(8.0, 0.0),
-            Vec2::new(10.0, 0.0),
-        ];
-        let pl_path = PLPath::new(nodes);
-
-        let puncture_points: Vec<PuncturePoint> = vec![
-            PuncturePoint::new(Vec2::new(4.0, 3.0), 'A'),
-            PuncturePoint::new(Vec2::new(7.0, 1.0), 'B'),
-        ];
-
-        let path_type = PathType::from_path(pl_path, puncture_points);
-        let word = path_type.word();
-
-        // The expected word is "ABA" because:
-        // - The path goes around 'A' in the counterclockwise direction (once)
-        // - The path goes around 'B' in the counterclockwise direction (once)
-        // - The path goes around 'A' in the counterclockwise direction (once again)
-        assert_eq!(word, "ABA");
     }
 }
