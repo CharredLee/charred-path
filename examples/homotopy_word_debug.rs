@@ -7,11 +7,7 @@ const PLAYER_START: Vec3 = Vec3::new(0.0, 0.0, 0.0);
 
 fn main() {
     let mut app = App::new();
-    app.add_plugins((
-        DefaultPlugins,
-        PathPlugin,
-        PathDebugPlugin,
-    ));
+    app.add_plugins((DefaultPlugins, PathPlugin, PathDebugPlugin));
     app.add_systems(Startup, init);
     app.add_systems(FixedUpdate, player_movement);
     app.add_systems(Update, homotopy_text_update);
@@ -71,19 +67,18 @@ fn init(
             TextStyle {
                 font_size: 60.0,
                 ..Default::default()
-            }
+            },
         )
         .with_text_justify(JustifyText::Center)
         .with_style(Style {
             position_type: PositionType::Absolute,
             bottom: Val::Px(5.0),
-            right: Val::Px(5.0), 
+            right: Val::Px(5.0),
             ..Default::default()
         }),
         HomotopyWordText,
     ));
 }
-
 
 fn player_movement(
     mut player_query: Query<&mut Transform, With<Player>>,
@@ -107,8 +102,6 @@ fn player_movement(
         transform.translation += 200.0 * dir * time.delta_seconds();
     }
 }
-
-
 
 fn homotopy_text_update(
     mut text_query: Query<&mut Text, With<HomotopyWordText>>,

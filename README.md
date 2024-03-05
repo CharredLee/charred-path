@@ -1,6 +1,6 @@
 # README
 
-## Charred Path
+## `charred-path`
 
 `charred-path` is a component-based plugin for Bevy used for recording the homotopy type of a moving object around a specified set of points in 2D.
 
@@ -29,14 +29,13 @@ Please refer to the source code of the example for more detailed usage instructi
 To get started using this crate in your Bevy project, add `PathPlugin` (and optionally, `PathDebugPlugin`) to your Bevy app using the `add_plugins` method:
 
 ```rust
-use charred_path::PathPlugin;
-use charred_path::PathDebugPlugin;
+use charred_path::{PathPlugin, PathDebugPlugin};
 
 fn main() {
     App::new()
         // other plugins
         .add_plugins((
-            PathPlugin, 
+            PathPlugin,
             PathDebugPlugin, // the PathDebugPlugin is optional, and for debugging purposes only.
         ))
         .run();
@@ -59,18 +58,19 @@ The path recording functionality can also be used to influence game logic. For e
 
 ### The math behind this crate
 
-The foundational mathematics behind this crate is that of [algebraic topology](https://en.wikipedia.org/wiki/Algebraic_topology), namely [homotopy](https://en.wikipedia.org/wiki/Homotopy). Roughly speaking, two paths are considered *homotopic* if one path can be transformed into the other continuously, without tearing or jumping over gaps.
+The foundational mathematics behind this crate is that of [algebraic topology](https://en.wikipedia.org/wiki/Algebraic_topology), namely [homotopy](https://en.wikipedia.org/wiki/Homotopy). Roughly speaking, two paths are considered _homotopic_ if one path can be transformed into the other continuously, without tearing or jumping over gaps.
 
-Let $n$ be a natual number. The *wedge* (or *bouquet*) of $n$ circles is the space obtained by gluing together $n$ circles at a single point. [Here](https://en.wikipedia.org/wiki/Wedge_sum#/media/File:Wedge_of_Two_Circles.png) is an example which displays the wedge of two circles. Up to homotopy equivalence, this is the space we are working in when there are $n$ punctured points in the plane.
+Let $n$ be a natual number. The _wedge_ (or _bouquet_) of $n$ circles is the space obtained by gluing together $n$ circles at a single point. [Here](https://en.wikipedia.org/wiki/Wedge_sum#/media/File:Wedge_of_Two_Circles.png) is an example which displays the wedge of two circles. Up to homotopy equivalence, this is the space we are working in when there are $n$ punctured points in the plane.
 
 A loop in the wedge of $n$ circles is encoded as a word in $n$ letters using a specific encoding scheme. Each letter in the word corresponds to a circle in the wedge, and the order of the letters represents the order in which the circles are traversed in the loop. In `charred-path`, the name of a puncture point is the letter used to represent the circle made by traversing around it; capital letters correspond to counter-clockwise traversal, and lowercase letters correspond to clockwise traversal.
 
-To identify distinct paths as distinct strings of letters, we identify each path in the plane with the loop created by closing the ends of the path via the straight line between them. Paths are identified up to *basepoint-preserving homotopy*, which is a version of [relative homotopy](https://en.wikipedia.org/wiki/Homotopy#Relative_homotopy) where the basepoint must remain unmoved. This is a subtle notion which causes loops in the plane to occasionally have word representations which are unexpectedly complicated, but it is necessary to distinguish loops which are distinct in terms of movement. Here is an example from `homotopy_word_debug` which illustrates this:
+To identify distinct paths as distinct strings of letters, we identify each path in the plane with the loop created by closing the ends of the path via the straight line between them. Paths are identified up to _basepoint-preserving homotopy_, which is a version of [relative homotopy](https://en.wikipedia.org/wiki/Homotopy#Relative_homotopy) where the basepoint must remain unmoved. This is a subtle notion which causes loops in the plane to occasionally have word representations which are unexpectedly complicated, but it is necessary to distinguish loops which are distinct in terms of movement. Here is an example from `homotopy_word_debug` which illustrates this:
 
-![Path in the plane simply going around point D clockwise](images/loop_around_d_below_c.png) 
+![Path in the plane simply going around point D clockwise](images/loop_around_d_below_c.png)
+
 ![Path in the plane going above point C, around point D clockwise, then back above point C](images/loop_around_d_above_c.png)
 
-These two loops are (ambiently) homotopic to one another, since they both just go around D clockwise. However, if the basepoint of the loop (starting position of the player) is not allowed to move, then these are *not* homotopic. Hence, they represent distinct loops from the perspective of the movement paths, and must be represented differently. In the latter image, one may consider the player as having "gone around C clockwise, then gone around D clockwise, then gone around C counter-clockwise." It is easy to see that doing so is homotopic to that path; this explains the word being `cdC` in that case.
+These two loops are (ambiently) homotopic to one another, since they both just go around D clockwise. However, if the basepoint of the loop (starting position of the player) is not allowed to move, then these are _not_ homotopic. Hence, they represent distinct loops from the perspective of the movement paths, and must be represented differently. In the latter image, one may consider the player as having "gone around C clockwise, then gone around D clockwise, then gone around C counter-clockwise." It is easy to see that doing so is homotopic to that path; this explains the word being `cdC` in that case.
 
 To get a more concrete understanding of the mechanics this crate provides, it's recommended that you play with the `homotopy_word_debug` example.
 
