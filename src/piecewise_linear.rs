@@ -117,26 +117,19 @@ impl PuncturePoint {
         let a = (p2.y - p3.y).mul_add(p.x - p3.x, (p3.x-p2.x) * (p.y-p3.y)) / denom;
         let b = (p3.y - p1.y).mul_add(p.x - p3.x, (p1.x-p3.x) * (p.y-p3.y)) / denom;
         let c = 1.0 - a - b;
-        [a, b, c].iter().all(|x| (-f32::EPSILON..(1.+f32::EPSILON)).contains(x))
-        
+        [a, b, c].iter().all(|x| (0.0..1.0).contains(x))
     }
 
     /// Checks if the puncture point should be removed based on its position relative to a triangle.
     fn should_remove(&self, p1: &Vec2, p2: &Vec2, p3: &Vec2) -> bool {
         let x = self.position().x;
-        !(self.is_in_triangle(p1, p2, p3) 
-            || ((p1.x..p2.x).contains(&x) && p2.x < p3.x && (x-p2.x).abs() > 1e-4)
-            || ((p2.x..p1.x).contains(&x) && p3.x < p2.x && (x-p2.x).abs() > 1e-4))
+        !(self.is_in_triangle(p1, p2, p3)
+            || ((p1.x..p2.x).contains(&x) && p2.x < p3.x && (x-p2.x).abs() < 1e-3)
+            || ((p2.x..p1.x).contains(&x) && p3.x < p2.x && (x-p2.x).abs() < 1e-3))
+            // || (*self.position() - *p2).length_squared() < 5.0 && (*self.position() - *p3).length_squared() < 20.0
     }
 
     /// Updates the winding of the puncture point based on its position relative to a line segment.
-    ///
-    /// # Arguments
-    ///
-    /// * `start` - The starting point of the line segment.
-    /// * `end` - The ending point of the line segment.
-    ///
-    /// # Returns
     ///
     /// Returns `Some(1)` if the line passes left -> right above the point, 
     /// `Some(-1)` if the line passes right -> left above the point, and
