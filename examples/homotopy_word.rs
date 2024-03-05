@@ -1,8 +1,9 @@
+use bevy::prelude::*;
 use bevy::sprite::MaterialMesh2dBundle;
 use charred_path::{piecewise_linear::PathPlugin, prelude::*};
 
 const PLAYER_COLOR: Color = Color::rgb(0.15, 0.6, 0.5);
-const PLAYER_START: Vec3 = Vec3::new(-300.0, 0.0, 0.0);
+const PLAYER_START: Vec3 = Vec3::new(0.0, 0.0, 0.0);
 
 fn main() {
     let mut app = App::new();
@@ -34,9 +35,9 @@ fn init(
 
     // Define some puncture points
     let puncture_points = vec![
-        PuncturePoint::new(Vec2::new(-100.0, 100.0), 'A'),
-        PuncturePoint::new(Vec2::new(150.0, -50.0), 'B'),
-        PuncturePoint::new(Vec2::new(-200.0, -150.0), 'C'),
+        PuncturePoint::new(Vec2::new(-200.0, 100.0), 'A'),
+        PuncturePoint::new(Vec2::new(0.0, 100.0), 'B'),
+        PuncturePoint::new(Vec2::new(200.0, 0.0), 'C'),
     ];
 
     // Render puncture points as red circles

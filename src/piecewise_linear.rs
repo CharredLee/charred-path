@@ -25,11 +25,11 @@ impl Plugin for PathDebugPlugin {
 
 
 
-/// Checks if a triangle defined by three points should not be removed based on a list of puncture points.
-fn should_not_remove(p1: &Vec2, p2: &Vec2, p3: &Vec2, puncture_points: &[PuncturePoint]) -> bool {
+/// Checks if the prior node should be removed. Returns true if it should be removed.
+fn should_remove(p1: &Vec2, p2: &Vec2, p3: &Vec2, puncture_points: &[PuncturePoint]) -> bool {
     puncture_points
         .iter()
-        .any(|p| p.should_not_remove(p1, p2, p3))
+        .all(|p| p.should_remove(p1, p2, p3))
 }
 
 /// Resource struct representing a timer for path updates.
@@ -59,7 +59,9 @@ fn update_entity_position(
     // if path_timer.timer.just_finished() {
     for (mut path_type, transform) in path_query.iter_mut() {
         let current_position = transform.translation.truncate();
-        path_type.push(&current_position);
+        if &current_position != path_type.current_path.end() {
+            path_type.push(&current_position);
+        }
     }
     // }
 }
@@ -119,12 +121,12 @@ impl PuncturePoint {
         
     }
 
-    /// Checks if the puncture point should not be removed based on its position relative to a triangle.
-    fn should_not_remove(&self, p1: &Vec2, p2: &Vec2, p3: &Vec2) -> bool {
+    /// Checks if the puncture point should be removed based on its position relative to a triangle.
+    fn should_remove(&self, p1: &Vec2, p2: &Vec2, p3: &Vec2) -> bool {
         let x = self.position().x;
-        self.is_in_triangle(p1, p2, p3) 
+        !(self.is_in_triangle(p1, p2, p3) 
             || ((p1.x..p2.x).contains(&x) && p2.x < p3.x && (x-p2.x).abs() > 1e-4)
-            || ((p2.x..p1.x).contains(&x) && p3.x < p2.x && (x-p2.x).abs() > 1e-4)
+            || ((p2.x..p1.x).contains(&x) && p3.x < p2.x && (x-p2.x).abs() > 1e-4))
     }
 
     /// Updates the winding of the puncture point based on its position relative to a line segment.
@@ -225,14 +227,54 @@ impl PLPath {
     }
 }
 
-
+/// Represents the homotopy type of a path in a punctured plane.
+///
+/// The `PathType` struct encapsulates the current path, puncture points, and the word representation
+/// of the homotopy type. It provides methods to update the path and retrieve the word representation.
+///
+/// # Fields
+///
+/// - `current_path`: The current path represented as a `PLPath` (piecewise linear path).
+/// - `puncture_points`: A shared reference to an array of `PuncturePoint` objects representing the puncture points in the plane.
+/// - `word`: The word representation of the homotopy type, which is automatically updated whenever the path is modified.
+///
+/// # Examples
+///
+/// ```
+/// use your_library::{PathType, PLPath, PuncturePoint};
+/// use std::sync::Arc;
+///
+/// let puncture_points = vec![
+///     PuncturePoint { position: (0.0, 0.0), name: 'A' },
+///     PuncturePoint { position: (1.0, 1.0), name: 'B' },
+/// ];
+/// let puncture_points = Arc::new(puncture_points);
+///
+/// let initial_path = PLPath::new();
+/// let mut path_type = PathType {
+///     current_path: initial_path,
+///     puncture_points,
+///     word: String::new(),
+/// };
+///
+/// // Update the path
+/// let new_path = PLPath::from_points(&[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)]);
+/// path_type.update_path(new_path);
+///
+/// // Get the updated word representation
+/// println!("Word representation: {}", path_type.word());
+/// ```
 #[derive(Debug, Clone, Component)]
 pub struct PathType {
     current_path: PLPath,
     puncture_points: Arc<[PuncturePoint]>,
+    word: String,
 }
 
 impl PathType {
+    pub fn word_as_str(&self) -> &str { &self.word }
+    pub fn word(&self) -> String { self.word.clone() }
+
     pub fn new(
         start: Vec2, 
         puncture_points: Vec<PuncturePoint>
@@ -240,40 +282,40 @@ impl PathType {
         Self {
             current_path: PLPath::new(vec![start]),
             puncture_points: puncture_points.into(),
+            word: String::new(),
         }
     }
 
     pub fn from_path(
         path: PLPath,
-        puncture_points: Vec<PuncturePoint>,
+        puncture_points: Arc<[PuncturePoint]>,
     ) -> Self {
-        Self {
+        let mut path_type = Self {
             current_path: path,
-            puncture_points: puncture_points.into(),
-        }
+            puncture_points,
+            word: String::new(),
+        };
+        path_type.update_word();
+        path_type
     }
 
     #[must_use]
     pub fn concatenate(&self, other: &PLPath) -> Self {
-        Self {
-            current_path: self.current_path.concatenate(other),
-            puncture_points: self.puncture_points.clone(),
-        }
+        Self::from_path(
+            self.current_path.concatenate(other),
+            self.puncture_points.clone()
+        )
     }
 
-    pub fn reverse(&mut self) {
-        self.current_path = self.current_path.reverse();
-    }
-
-    pub fn pop(&mut self) {
-        self.current_path.nodes.pop();
+    fn pop(&mut self) -> Option<Vec2> {
+        self.current_path.nodes.pop()
     }
 
     /// Appends a 2d position to the end of the current path.
     pub fn push(&mut self, point: &Vec2) {
         let _ = &self.current_path.nodes.split_last();
         if let [.., p1, p2] = &self.current_path.nodes[..] {
-            if !should_not_remove(p1, p2, point, &self.puncture_points) {
+            if should_remove(p1, p2, point, &self.puncture_points) {
                 self.pop();
                 self.push(point);
             } else {
@@ -282,9 +324,12 @@ impl PathType {
         } else {
             self.current_path.push(point);
         }
+        self.update_word();
     }
 
-    pub fn word(&self) -> String {
+    /// Updates the word representing the homotopy type of the path.
+    /// Returns the updated word.
+    pub fn update_word(&mut self) -> String {
         let mut word = String::new();
         let full_loop: Vec<&Vec2> = self.current_path.nodes
             .iter()
@@ -316,6 +361,7 @@ impl PathType {
         }
 
         simplify_word(&mut word);
+        self.word = word.clone();
         word
     }
 }
@@ -359,13 +405,13 @@ mod tests {
 
     #[test]
     fn test_is_point_in_triangle() {
-        let p1 = &Vec2 { x: 0.0, y: 0.0 };
-        let p2 = &Vec2 { x: 4.0, y: 0.0 };
-        let p3 = &Vec2 { x: 2.0, y: 4.0 };
+        let p1 = &Vec2::new(0.0, 0.0);
+        let p2 = &Vec2::new(4.0, 0.0);
+        let p3 = &Vec2::new(2.0, 4.0);
 
-        let puncture_point_inside = PuncturePoint { position: Vec2 { x: 2.0, y: 2.0 }, name: 'A' };
-        let puncture_point_inside_2 = PuncturePoint { position: Vec2::new(0.1, 0.1), name: 'B' };
-        let puncture_point_outside = PuncturePoint { position: Vec2 { x: 5.0, y: 5.0 }, name: 'C' };
+        let puncture_point_inside = PuncturePoint::new(*p1, 'A');
+        let puncture_point_inside_2 = PuncturePoint::new(*p2, 'B');
+        let puncture_point_outside = PuncturePoint::new(*p3, 'A');
 
         assert!(puncture_point_inside.is_in_triangle(p1, p2, p3));
         assert!(puncture_point_inside_2.is_in_triangle(p1, p2, p3));
