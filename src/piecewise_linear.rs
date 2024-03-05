@@ -313,13 +313,12 @@ impl PathType {
 
     /// Appends a 2d position to the end of the current path.
     pub fn push(&mut self, point: &Vec2) {
-        let _ = &self.current_path.nodes.split_last();
         if let [.., p1, p2] = &self.current_path.nodes[..] {
             if should_remove(p1, p2, point, &self.puncture_points) {
                 self.pop();
                 self.push(point);
             } else {
-                self.current_path.push(point); 
+                self.current_path.push(point);
             }
         } else {
             self.current_path.push(point);
