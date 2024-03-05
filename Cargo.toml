@@ -3,6 +3,9 @@ name = "charred-path"
 version = "0.1.0"
 edition = "2021"
 
+[[example]]
+name = "homotopy_word"
+path = "examples/homotopy_word.rs"
 
 [dependencies]
 bevy = "0.13"
