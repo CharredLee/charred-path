@@ -108,16 +108,6 @@ impl PuncturePoint {
     pub const fn name(&self) -> char { self.name }
 
     /// Checks if the puncture point is inside a triangle defined by three points.
-    ///
-    /// # Arguments
-    ///
-    /// * `p1` - The first point of the triangle.
-    /// * `p2` - The second point of the triangle.
-    /// * `p3` - The third point of the triangle.
-    ///
-    /// # Returns
-    ///
-    /// Returns `true` if the puncture point is inside the triangle, `false` otherwise.
     fn is_in_triangle(&self, p1: &Vec2, p2: &Vec2, p3: &Vec2) -> bool {
         let p = self.position();
         let denom = (p2.y - p3.y).mul_add(p1.x - p3.x, (p3.x-p2.x) * (p1.y-p3.y));
@@ -130,52 +120,12 @@ impl PuncturePoint {
     }
 
     /// Checks if the puncture point should not be removed based on its position relative to a triangle.
-    ///
-    /// # Arguments
-    ///
-    /// * `p1` - The first point of the triangle.
-    /// * `p2` - The second point of the triangle.
-    /// * `p3` - The third point of the triangle.
-    ///
-    /// # Returns
-    ///
-    /// Returns `true` if the puncture point should not be removed, `false` otherwise.
     fn should_not_remove(&self, p1: &Vec2, p2: &Vec2, p3: &Vec2) -> bool {
         let x = self.position().x;
         self.is_in_triangle(p1, p2, p3) 
             || ((p1.x..p2.x).contains(&x) && p2.x < p3.x && (x-p2.x).abs() > 1e-4)
             || ((p2.x..p1.x).contains(&x) && p3.x < p2.x && (x-p2.x).abs() > 1e-4)
     }
-
-    // fn is_between(&self, p1: &Vec2, p2: &Vec2) -> bool {
-    //     let (y_max, y_min) = (p1.y.max(p2.y), p1.y.min(p2.y));
-    //     if p1.x != p2.x {
-    //         let slope = (p2.y - p1.y) / (p2.x - p1.x);
-    //         if self.position.x != p1.x {
-    //             let self_slope = (self.position.y - p1.y) / (self.position.x - p1.x);
-    //             (slope - self_slope).abs() < f32::EPSILON && self.position.y < y_max && self.position.y > y_min
-    //         } else { 
-    //             false 
-    //         }
-    //     } else {
-    //         (self.position.x - p1.x).abs() < f32::EPSILON && self.position.y < y_max && self.position.y > y_min
-    //     }
-    // }
-
-    // fn is_close(&self, p1: &Vec2, p2: &Vec2) -> bool {
-    //     let (y_max, y_min) = (p1.y.max(p2.y), p1.y.min(p2.y));
-    //     if p1.x != p2.x {
-    //         let slope = (p2.y - p1.y) / (p2.x - p1.x);
-    //         if self.position.x != p1.x {
-    //             let self_slope = (self.position.y - p1.y) / (self.position.x - p1.x);
-    //             (slope - self_slope).abs() < f32::EPSILON && self.position.y < y_max && self.position.y > y_min
-    //         } else { 
-    //             false 
-    //         }
-    //     } else {
-    //         (self.position.x - p1.x).abs() < f32::EPSILON && self.position.y < y_max && self.position.y > y_min
-    //     }
-    // }
 
     /// Updates the winding of the puncture point based on its position relative to a line segment.
     ///
@@ -186,8 +136,9 @@ impl PuncturePoint {
     ///
     /// # Returns
     ///
-    /// Returns `Some(1)` if the puncture point is below the line segment, `Some(-1)` if it is above the line segment,
-    /// and `None` if it is on the line segment.
+    /// Returns `Some(1)` if the line passes left -> right above the point, 
+    /// `Some(-1)` if the line passes right -> left above the point, and
+    /// `None` otherwise.
     fn winding_update(&self, start: &Vec2, end: &Vec2) -> Option<i32> {
         let position = self.position();
         let cross_product = (end.y - start.y).mul_add(position.x - start.x, -((position.y - start.y) * (end.x - start.x)));
@@ -273,6 +224,7 @@ impl PLPath {
         }).chain(last)
     }
 }
+
 
 #[derive(Debug, Clone, Component)]
 pub struct PathType {
