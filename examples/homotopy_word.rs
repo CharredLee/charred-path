@@ -35,9 +35,10 @@ fn init(
 
     // Define some puncture points
     let puncture_points = vec![
-        PuncturePoint::new(Vec2::new(-200.0, 100.0), 'A'),
-        PuncturePoint::new(Vec2::new(0.0, 100.0), 'B'),
-        PuncturePoint::new(Vec2::new(200.0, 0.0), 'C'),
+        PuncturePoint::new(Vec2::new(-225.0, 100.0), 'A'),
+        PuncturePoint::new(Vec2::new(-75.0, 150.0), 'B'),
+        PuncturePoint::new(Vec2::new(75.0, 150.0), 'C'),
+        PuncturePoint::new(Vec2::new(225.0, 100.0), 'D'),
     ];
 
     // Render puncture points as red circles
