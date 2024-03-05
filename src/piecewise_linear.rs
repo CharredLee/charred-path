@@ -75,6 +75,8 @@ fn update_entity_position(
 /// is used to represent clockwise traversal around the puncture point, and `name.to_ascii_uppercase()` is used 
 /// to represent counterclockwise traversal.
 ///
+/// Note that the name character is made uppercase upon instantiation.
+/// 
 /// # Examples
 ///
 /// ```
@@ -84,7 +86,7 @@ fn update_entity_position(
 /// let position = Vec2::new(1.0, 2.0);
 /// let puncture_point = PuncturePoint::new(position, 'a');
 /// assert_eq!(puncture_point.position(), &position);
-/// assert_eq!(puncture_point.name(), 'a');
+/// assert_eq!(puncture_point.name(), 'A');
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Component)]
 pub struct PuncturePoint {
@@ -96,7 +98,7 @@ pub struct PuncturePoint {
 impl PuncturePoint {
     /// Represents a puncture point in the plane.
     pub const fn new(position: Vec2, name: char) -> Self {
-        Self { position, name }
+        Self { position, name: name.to_ascii_uppercase() }
     }
 
     /// Returns the position of the puncture point in 2D.
