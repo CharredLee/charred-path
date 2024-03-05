@@ -373,7 +373,6 @@ fn simplify_word(word: &mut String) {
     }
 }
 
-/// # Rendering PL Paths for Debug purposes
 /// This visualizes the piecewise-linear paths.
 fn debug_render_paths(
     path_types: Query<&PathType>,

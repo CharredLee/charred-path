@@ -28,7 +28,6 @@ fn init(
     mut commands: Commands,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<ColorMaterial>>,
-    asset_server: Res<AssetServer>,
 ) {
     // spawn the camera
     commands.spawn(Camera2dBundle::default());
@@ -70,7 +69,6 @@ fn init(
         TextBundle::from_section(
             "default",
             TextStyle {
-                font: asset_server.load("fonts/Roboto-Bold.ttf"),
                 font_size: 60.0,
                 ..Default::default()
             }
