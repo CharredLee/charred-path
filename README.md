@@ -93,7 +93,7 @@ Here is a table listing the version compatibility between `charred-path` and `be
 
 | Bevy | `charred-path` |
 | ---- | -------------- |
-| 0.13 | 0.1.0          |
+| 0.13 | 0.1            |
 
 ### License
 
