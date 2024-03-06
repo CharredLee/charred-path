@@ -8,6 +8,7 @@ keywords = ["gamedev", "bevy", "ai", "state-machine"]
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/CharredLee/charred-path"
+exclude = ["images/"]
 
 [dependencies]
 bevy = "0.13"
