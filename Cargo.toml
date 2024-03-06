@@ -1,6 +1,6 @@
 [package]
 name = "charred-path"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 description = "Component-based Bevy plugin for tracking path and homotopy data for moving objects"
 categories = ["game-development", "mathematics", "science"]
